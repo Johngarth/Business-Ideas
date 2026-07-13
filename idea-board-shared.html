@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idea board — shared</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#eef1f4; --grid:#dbe2e9; --grid2:#cdd7e1;
+    --ink:#25313c; --ink-soft:#5d6b78; --line:#3d6ea5;
+    --c-yellow:#fdf0b1; --c-blue:#cfe4f7; --c-green:#d4ecd0; --c-pink:#f9d9dc; --c-white:#ffffff;
+  }
+  *{box-sizing:border-box; margin:0;}
+  html,body{height:100%; overflow:hidden;}
+  body{font-family:'Space Grotesk',sans-serif; color:var(--ink); background:var(--paper);}
+
+  #bar{position:fixed; top:0; left:0; right:0; height:56px; z-index:50;
+    display:flex; align-items:center; gap:14px; padding:0 18px;
+    background:rgba(255,255,255,.88); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--grid2);}
+  #title{font-weight:700; font-size:17px; border:none; background:transparent; outline:none;
+    color:var(--ink); min-width:120px; max-width:320px; border-bottom:2px dashed transparent;}
+  #title:focus{border-bottom-color:var(--line);}
+  .btn{font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:7px 13px; cursor:pointer;
+    border:1.5px solid var(--ink); background:#fff; color:var(--ink); border-radius:6px;
+    transition:transform .06s, background .12s;}
+  .btn:hover{background:var(--c-yellow);}
+  .btn:active{transform:scale(.96);}
+  .btn:focus-visible{outline:2px solid var(--line); outline-offset:2px;}
+  #hint{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); margin-left:auto;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #status{font-family:'IBM Plex Mono',monospace; font-size:11px; width:86px; text-align:right;}
+  #status.ok{color:#2c7a3f;} #status.warn{color:#b3382f;} #status.idle{color:var(--ink-soft);}
+
+  #board{position:absolute; inset:56px 0 0 0; overflow:auto; cursor:crosshair;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:24px 24px;}
+  #canvas{position:relative; width:2400px; height:1600px;}
+  #wires{position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
+  #wires path{pointer-events:stroke;}
+
+  #empty{position:absolute; top:38%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; color:var(--ink-soft); pointer-events:none; user-select:none;}
+  #empty b{display:block; font-size:22px; font-weight:700; color:var(--ink); margin-bottom:6px;}
+  #empty span{font-family:'IBM Plex Mono',monospace; font-size:13px;}
+
+  #setup{position:fixed; inset:56px 0 0 0; z-index:60; background:var(--paper);
+    display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:40px 20px;}
+  #setup .card{max-width:640px; background:#fff; border:1.5px solid var(--ink); border-radius:10px;
+    padding:26px 30px; box-shadow:0 10px 30px rgba(37,49,60,.12);}
+  #setup h2{font-size:20px; margin-bottom:10px;}
+  #setup p, #setup li{font-size:14px; line-height:1.6; color:var(--ink);}
+  #setup ol{padding-left:20px; margin:10px 0;}
+  #setup li{margin-bottom:8px;}
+  #setup code, #setup pre{font-family:'IBM Plex Mono',monospace; font-size:12px;
+    background:var(--paper); border-radius:4px;}
+  #setup code{padding:1px 5px;}
+  #setup pre{padding:10px 12px; overflow:auto; margin:6px 0; border:1px solid var(--grid2);}
+
+  .note{position:absolute; width:190px; min-height:110px; padding:12px 12px 30px;
+    background:var(--c-yellow); border-radius:2px; cursor:grab;
+    box-shadow:0 1px 2px rgba(37,49,60,.18), 0 6px 14px rgba(37,49,60,.10);
+    transition:box-shadow .12s;}
+  .note:focus-within, .note.sel{box-shadow:0 0 0 2px var(--line), 0 8px 18px rgba(37,49,60,.16);}
+  .note.dragging{cursor:grabbing; box-shadow:0 0 0 2px var(--line), 0 14px 26px rgba(37,49,60,.22); z-index:30;}
+  .note .txt{font-size:14px; line-height:1.45; outline:none; min-height:60px; word-wrap:break-word; cursor:text;}
+  .note .txt:empty::before{content:'Type an idea…'; color:rgba(37,49,60,.4);}
+  .note .tools{position:absolute; bottom:6px; left:10px; right:8px; display:flex; align-items:center; gap:5px;
+    opacity:0; transition:opacity .12s;}
+  .note:hover .tools, .note:focus-within .tools{opacity:1;}
+  .swatch{width:13px; height:13px; border-radius:50%; border:1px solid rgba(37,49,60,.35); cursor:pointer; padding:0;}
+  .del{margin-left:auto; border:none; background:none; cursor:pointer; color:var(--ink-soft);
+    font-size:14px; line-height:1; padding:2px 4px;}
+  .del:hover{color:#b3382f;}
+  .port{position:absolute; top:-8px; right:-8px; width:18px; height:18px; border-radius:50%;
+    background:#fff; border:2px solid var(--line); cursor:pointer; opacity:0; transition:opacity .12s;
+    display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--line);}
+  .note:hover .port, .note:focus-within .port, .note.linking .port{opacity:1;}
+  .note.linking{outline:2px dashed var(--line); outline-offset:3px;}
+  .note.target-ok{outline:2px solid var(--line); outline-offset:3px;}
+
+  path.wire{fill:none; stroke:var(--line); stroke-width:2; stroke-linecap:round; cursor:pointer;}
+  path.wire:hover{stroke:#b3382f; stroke-width:3;}
+  path.ghost{fill:none; stroke:var(--line); stroke-width:2; stroke-dasharray:6 6; opacity:.6;}
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
+  @media (max-width:640px){ #hint{display:none;} }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <input id="title" value="Untitled board" aria-label="Board name" maxlength="60">
+  <button class="btn" id="addBtn">+ Note</button>
+  <button class="btn" id="clearBtn">Clear</button>
+  <span id="hint">double-click → new note · drag ◉ note to note → connect · click a line → remove</span>
+  <span id="status" class="idle" aria-live="polite">offline</span>
+</div>
+
+<div id="board">
+  <div id="canvas">
+    <svg id="wires" aria-hidden="true"></svg>
+    <div id="empty"><b>Blank board</b><span>double-click to drop your first idea</span></div>
+  </div>
+</div>
+
+<div id="setup" hidden>
+  <div class="card">
+    <h2>One-time setup (board owner only)</h2>
+    <p>This board syncs live through a free Supabase project you control. Five minutes:</p>
+    <ol>
+      <li>Create a free project at <code>supabase.com</code> (any name, any region).</li>
+      <li>In the project: SQL Editor → run this once:
+<pre>create table boards (
+  id text primary key,
+  data jsonb not null default '{}',
+  updated_at timestamptz default now()
+);
+alter table boards enable row level security;
+create policy "open board" on boards
+  for all using (true) with check (true);
+alter publication supabase_realtime add table boards;
+insert into boards (id, data) values
+  ('main', '{"title":"Untitled board","notes":[],"links":[]}');</pre></li>
+      <li>Project Settings → API: copy the <b>Project URL</b> and the <b>anon public key</b>.</li>
+      <li>Open this HTML file in a text editor, find <code>CONFIG</code> at the top of the
+          script, and paste both values in.</li>
+      <li>Host the file anywhere free — easiest: drag it onto <code>app.netlify.com/drop</code>
+          (no account needed for a temp site) or push to GitHub Pages. Send the resulting URL
+          to your collaborators.</li>
+    </ol>
+    <p><b>Note:</b> the policy above makes the board writable by anyone who has your page URL —
+       treat the link as the key. Don't put anything sensitive on the board.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* ============ CONFIG — paste your Supabase values here ============ */
+const CONFIG = {
+  SUPABASE_URL: "",        // https://ztgljiyybupomtiiehfe.supabase.co
+  SUPABASE_ANON_KEY: "",   // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0Z2xqaXl5YnVwb210aWllaGZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NzkxMTEsImV4cCI6MjA5OTU1NTExMX0.eZujaN0aV-hCIqDvpw6LkdIjKGM2AxbmTe8d4a9O1jU
+  BOARD_ID: "main"         // change to run several separate boards
+};
+/* ================================================================== */
+
+const COLORS = ['var(--c-yellow)','var(--c-blue)','var(--c-green)','var(--c-pink)','var(--c-white)'];
+const COLOR_KEYS = ['yellow','blue','green','pink','white'];
+let state = { title:'Untitled board', notes:[], links:[] };
+let nextId = 1;
+let ghost = null;
+let sb = null, applyingRemote = false;
+const canvas = document.getElementById('canvas');
+const wires = document.getElementById('wires');
+const board = document.getElementById('board');
+const emptyEl = document.getElementById('empty');
+const statusEl = document.getElementById('status');
+const titleEl = document.getElementById('title');
+
+function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = cls; }
+
+/* ---------- sync ---------- */
+let saveTimer = null;
+function scheduleSave(){
+  if(applyingRemote) return;
+  setStatus('…','idle');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 500);
+}
+async function save(){
+  if(!sb){ setStatus('offline','warn'); return; }
+  const { error } = await sb.from('boards')
+    .update({ data: state, updated_at: new Date().toISOString() })
+    .eq('id', CONFIG.BOARD_ID);
+  setStatus(error ? 'sync error' : 'synced', error ? 'warn' : 'ok');
+}
+function userIsBusy(){
+  const a = document.activeElement;
+  return (a && a.classList && a.classList.contains('txt')) ||
+         document.querySelector('.note.dragging') || ghost;
+}
+function applyRemote(data){
+  if(userIsBusy()){ setTimeout(()=>applyRemote(data), 1200); return; }
+  applyingRemote = true;
+  state = data && data.notes ? data : state;
+  nextId = state.notes.reduce((m,n)=>Math.max(m,n.id),0)+1;
+  titleEl.value = state.title || 'Untitled board';
+  document.querySelectorAll('.note').forEach(el=>el.remove());
+  state.notes.forEach(n=>renderNote(n,false));
+  drawWires(); updateEmpty();
+  applyingRemote = false;
+  setStatus('synced','ok');
+}
+async function connect(){
+  if(!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY){
+    document.getElementById('setup').hidden = false;
+    setStatus('not set up','warn');
+    return;
+  }
+  sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  const { data, error } = await sb.from('boards').select('data').eq('id', CONFIG.BOARD_ID).single();
+  if(error){ setStatus('load error','warn'); return; }
+  applyRemote(data.data);
+  sb.channel('board-'+CONFIG.BOARD_ID)
+    .on('postgres_changes',
+        { event:'UPDATE', schema:'public', table:'boards', filter:'id=eq.'+CONFIG.BOARD_ID },
+        payload => { if(!saveTimer || applyingRemote) applyRemote(payload.new.data); else applyRemote(payload.new.data); })
+    .subscribe(s => { if(s==='SUBSCRIBED') setStatus('live','ok'); });
+}
+
+/* ---------- notes ---------- */
+function addNote(x, y, focus=true){
+  const n = { id: nextId++, x: Math.max(4,x), y: Math.max(4,y), text:'', color:'yellow' };
+  state.notes.push(n);
+  renderNote(n, focus);
+  updateEmpty(); scheduleSave();
+}
+function renderNote(n, focus=false){
+  const el = document.createElement('div');
+  el.className = 'note'; el.id = 'note-'+n.id;
+  el.style.left = n.x+'px'; el.style.top = n.y+'px';
+  el.style.background = COLORS[COLOR_KEYS.indexOf(n.color)] || COLORS[0];
+
+  const txt = document.createElement('div');
+  txt.className = 'txt'; txt.contentEditable = 'true'; txt.spellcheck = false;
+  txt.textContent = n.text;
+  txt.addEventListener('input', ()=>{ n.text = txt.textContent; scheduleSave(); });
+  txt.addEventListener('mousedown', e=>e.stopPropagation());
+  el.appendChild(txt);
+
+  const tools = document.createElement('div'); tools.className='tools';
+  COLOR_KEYS.forEach((k,i)=>{
+    const s = document.createElement('button');
+    s.className='swatch'; s.style.background = COLORS[i];
+    s.setAttribute('aria-label','Color '+k);
+    s.addEventListener('mousedown', e=>e.stopPropagation());
+    s.addEventListener('click', ()=>{ n.color=k; el.style.background=COLORS[i]; scheduleSave(); });
+    tools.appendChild(s);
+  });
+  const del = document.createElement('button');
+  del.className='del'; del.textContent='✕'; del.setAttribute('aria-label','Delete note');
+  del.addEventListener('mousedown', e=>e.stopPropagation());
+  del.addEventListener('click', ()=>{
+    state.notes = state.notes.filter(m=>m.id!==n.id);
+    state.links = state.links.filter(l=>l[0]!==n.id && l[1]!==n.id);
+    el.remove(); drawWires(); updateEmpty(); scheduleSave();
+  });
+  tools.appendChild(del);
+  el.appendChild(tools);
+
+  const port = document.createElement('div');
+  port.className='port'; port.textContent='◉'; port.title='Drag to another note to connect';
+  port.addEventListener('mousedown', e=>{
+    e.stopPropagation(); e.preventDefault();
+    startLink(n, e);
+  });
+  el.appendChild(port);
+
+  el.addEventListener('mousedown', e=>startDrag(n, el, e));
+  canvas.appendChild(el);
+  if(focus) txt.focus();
+}
+function center(n){
+  const el = document.getElementById('note-'+n.id);
+  return { x: n.x + (el ? el.offsetWidth/2 : 95), y: n.y + (el ? el.offsetHeight/2 : 60) };
+}
+
+/* ---------- drag ---------- */
+function startDrag(n, el, e){
+  if(e.button!==0) return;
+  const sx=e.clientX, sy=e.clientY, ox=n.x, oy=n.y;
+  let moved=false;
+  el.classList.add('dragging');
+  function mv(ev){
+    const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    if(Math.abs(dx)>2||Math.abs(dy)>2) moved=true;
+    n.x = Math.max(0, Math.min(canvas.offsetWidth-el.offsetWidth, ox+dx));
+    n.y = Math.max(0, Math.min(canvas.offsetHeight-el.offsetHeight, oy+dy));
+    el.style.left=n.x+'px'; el.style.top=n.y+'px';
+    drawWires();
+  }
+  function up(){
+    el.classList.remove('dragging');
+    document.removeEventListener('mousemove',mv);
+    document.removeEventListener('mouseup',up);
+    if(moved) scheduleSave();
+  }
+  document.addEventListener('mousemove',mv);
+  document.addEventListener('mouseup',up);
+}
+
+/* ---------- connections ---------- */
+function startLink(n, e){
+  document.getElementById('note-'+n.id).classList.add('linking');
+  ghost = document.createElementNS('http://www.w3.org/2000/svg','path');
+  ghost.setAttribute('class','ghost');
+  wires.appendChild(ghost);
+  function mv(ev){
+    const r = canvas.getBoundingClientRect();
+    const p = center(n);
+    ghost.setAttribute('d', curve(p.x,p.y,ev.clientX-r.left,ev.clientY-r.top));
+    document.querySelectorAll('.note').forEach(el=>{
+      const id = +el.id.slice(5);
+      el.classList.toggle('target-ok', id!==n.id && el.matches(':hover'));
+    });
+  }
+  function up(ev){
+    document.removeEventListener('mousemove',mv);
+    document.removeEventListener('mouseup',up);
+    ghost.remove(); ghost=null;
+    document.getElementById('note-'+n.id).classList.remove('linking');
+    document.querySelectorAll('.target-ok').forEach(el=>el.classList.remove('target-ok'));
+    const target = ev.target.closest('.note');
+    if(target){
+      const tid = +target.id.slice(5);
+      if(tid!==n.id && !state.links.some(l=>(l[0]===n.id&&l[1]===tid)||(l[0]===tid&&l[1]===n.id))){
+        state.links.push([n.id, tid]);
+        drawWires(); scheduleSave();
+      }
+    }
+  }
+  document.addEventListener('mousemove',mv);
+  document.addEventListener('mouseup',up);
+}
+function curve(x1,y1,x2,y2){
+  const dx = Math.max(40, Math.abs(x2-x1)*0.4);
+  return `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+}
+function drawWires(){
+  const ghostD = ghost ? ghost.getAttribute('d') : null;
+  wires.innerHTML='';
+  state.links.forEach((l,i)=>{
+    const a = state.notes.find(n=>n.id===l[0]);
+    const b = state.notes.find(n=>n.id===l[1]);
+    if(!a||!b) return;
+    const p1=center(a), p2=center(b);
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('class','wire');
+    path.setAttribute('d', curve(p1.x,p1.y,p2.x,p2.y));
+    path.addEventListener('click', ()=>{
+      state.links.splice(i,1); drawWires(); scheduleSave();
+    });
+    wires.appendChild(path);
+  });
+  if(ghost){ ghost.setAttribute('d', ghostD||''); wires.appendChild(ghost); }
+}
+
+/* ---------- board events ---------- */
+board.addEventListener('dblclick', e=>{
+  if(e.target.closest('.note')) return;
+  const r = canvas.getBoundingClientRect();
+  addNote(e.clientX-r.left-95, e.clientY-r.top-55);
+});
+document.getElementById('addBtn').addEventListener('click', ()=>{
+  addNote(board.scrollLeft+80+Math.random()*120, board.scrollTop+90+Math.random()*120);
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(!state.notes.length) return;
+  if(!confirm('Clear the whole board for EVERYONE? This removes every note and connection.')) return;
+  state.notes=[]; state.links=[];
+  document.querySelectorAll('.note').forEach(el=>el.remove());
+  drawWires(); updateEmpty(); scheduleSave();
+});
+titleEl.addEventListener('input', ()=>{ state.title=titleEl.value; scheduleSave(); });
+
+function updateEmpty(){ emptyEl.style.display = state.notes.length ? 'none' : 'block'; }
+
+connect();
+</script>
+</body>
+</html>
