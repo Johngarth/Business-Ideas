@@ -108,33 +108,6 @@
     <div id="empty"><b>Blank board</b><span>double-tap the grid or hit + Note</span></div>
   </div>
 </div>
-
-<div id="setup" hidden>
-  <div class="card">
-    <h2>One-time setup (board owner only)</h2>
-    <p>This board syncs live through a free Supabase project you control. Five minutes:</p>
-    <ol>
-      <li>Create a free project at <code>supabase.com</code> (any name, any region).</li>
-      <li>In the project: SQL Editor → run this once:
-<pre>create table boards (
-  id text primary key,
-  data jsonb not null default '{}',
-  updated_at timestamptz default now()
-);
-alter table boards enable row level security;
-create policy "open board" on boards
-  for all using (true) with check (true);
-alter publication supabase_realtime add table boards;
-insert into boards (id, data) values
-  ('main', '{"title":"Untitled board","notes":[],"links":[]}');</pre></li>
-      <li>Project Settings → API: copy the <b>Project URL</b> and the <b>anon public key</b>.</li>
-      <li>Edit this file, find <code>CONFIG</code> at the top of the script, paste both values.</li>
-      <li>Host the file (GitHub Pages or Netlify Drop) and share the URL.</li>
-    </ol>
-    <p><b>Note:</b> anyone with the page URL can read and edit the board — the link is the key.</p>
-  </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 /* ============ CONFIG — paste your Supabase values here ============ */
